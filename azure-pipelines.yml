@@ -40,7 +40,7 @@ stages:
         useConfigurationFile: true
         configuration: 'manifests/deployment.yaml'
 
-- stage: DeployProd
+- - stage: DeployProd
   dependsOn: DeployQA
   jobs:
   - job: Deploy
