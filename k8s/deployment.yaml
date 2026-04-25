@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aks-demo-python
+  namespace: aks-demo-python
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aks-demo-python
+  template:
+    metadata:
+      labels:
+        app: aks-demo-python
+    spec:
+      containers:
+      - name: aks-demo-python
+        image: myacr.azurecr.io/aks-demo-python:latest
+        ports:
+        - containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 20

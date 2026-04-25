@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  Name: AzureAgent
 
 variables:
   imageName: 'aks-demo-python'
@@ -13,6 +13,28 @@ variables:
   aksClusterName: 'MyAKSCluster'
 
 stages:
+- stage: Test
+  displayName: Run tests and linting
+  jobs:
+  - job: Test
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.11'
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+        pip install flake8
+      displayName: 'Install dependencies'
+    - script: |
+        flake8 app.py --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 app.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      displayName: 'Run flake8 linting'
+    - script: |
+        pytest tests/ --verbose --tb=short
+      displayName: 'Run tests'
+
 - stage: Build
   displayName: Build and push image
   jobs:
@@ -28,22 +50,53 @@ stages:
         tags: |
           $(Build.BuildId)
 
-- stage: Deploy
-  displayName: Deploy to AKS
-  dependsOn: Build
+- stages:
+- stage: DeployDev
   jobs:
   - job: Deploy
-    pool:
-      vmImage: 'ubuntu-latest'
     steps:
-    - task: AzureCLI@2
-      displayName: Get AKS credentials
+    - task: Kubernetes@1
       inputs:
-        azureSubscription: '$(azureSubscription)'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksClusterName) --overwrite-existing
+        connectionType: 'Azure Resource Manager'
+        azureSubscription: 'MyAzureServiceConnection'
+        azureResourceGroup: 'aks-demo-rg'
+        kubernetesCluster: 'aks-demo-cluster'
+        namespace: 'dev'
+        command: 'apply'
+        useConfigurationFile: true
+        configuration: 'manifests/deployment.yaml'
+
+- stage: DeployQA
+  dependsOn: DeployDev
+  jobs:
+  - job: Deploy
+    steps:
+    - task: Kubernetes@1
+      inputs:
+        connectionType: 'Azure Resource Manager'
+        azureSubscription: 'MyAzureServiceConnection'
+        azureResourceGroup: 'aks-demo-rg'
+        kubernetesCluster: 'aks-demo-cluster'
+        namespace: 'qa'
+        command: 'apply'
+        useConfigurationFile: true
+        configuration: 'manifests/deployment.yaml'
+
+- stage: DeployProd
+  dependsOn: DeployQA
+  jobs:
+  - job: Deploy
+    steps:
+    - task: Kubernetes@1
+      inputs:
+        connectionType: 'Azure Resource Manager'
+        azureSubscription: 'MyAzureServiceConnection'
+        azureResourceGroup: 'aks-demo-rg'
+        kubernetesCluster: 'aks-demo-cluster'
+        namespace: 'prod'
+        command: 'apply'
+        useConfigurationFile: true
+        configuration: 'manifests/deployment.yaml'
 
     - task: AzureCLI@2
       displayName: Deploy to AKS with kubectl
