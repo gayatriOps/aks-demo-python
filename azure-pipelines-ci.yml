@@ -1,0 +1,60 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  imageName: 'aks-demo-python'
+  aksNamespace: 'aks-demo-python'
+  azureSubscription: 'MyAzureServiceConnection'
+  acrName: 'MyACRName'
+  aksResourceGroup: 'MyAKSResourceGroup'
+  aksClusterName: 'MyAKSCluster'
+
+stages:
+- stage: Build
+  displayName: Build and push image
+  jobs:
+  - job: Build
+    steps:
+    - task: Docker@2
+      displayName: Build and push Docker image
+      inputs:
+        containerRegistry: 'MyACRServiceConnection'
+        repository: 'aks-demo-python'
+        command: 'buildAndPush'
+        Dockerfile: '**/Dockerfile'
+        tags: |
+          $(Build.BuildId)
+
+- stage: Deploy
+  displayName: Deploy to AKS
+  dependsOn: Build
+  jobs:
+  - job: Deploy
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: Get AKS credentials
+      inputs:
+        azureSubscription: '$(azureSubscription)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksClusterName) --overwrite-existing
+
+    - task: AzureCLI@2
+      displayName: Deploy to AKS with kubectl
+      inputs:
+        azureSubscription: '$(azureSubscription)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          ACR_LOGIN_SERVER=$(az acr show --name $(acrName) --query loginServer -o tsv)
+          IMAGE="${ACR_LOGIN_SERVER}/$(imageName):$(Build.BuildId)"
+          kubectl create namespace $(aksNamespace) --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl set image deployment/aks-demo-python aks-demo-python=$IMAGE -n $(aksNamespace)
