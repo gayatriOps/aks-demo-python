@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  Name: Default
 
 variables:
   imageName: 'aks-demo-python'
