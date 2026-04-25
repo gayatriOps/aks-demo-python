@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  Name: AzureAgent
+  Name: Default
 
 variables:
   imageName: 'aks-demo-python'
